@@ -137,11 +137,11 @@ class FanControlWindow(Adw.ApplicationWindow):
                 f.write(value)
             return True
         except PermissionError:
-            self.show_error("Keine Berechtigung",
-                "Führe aus:\nsudo /usr/local/bin/fan-control.sh start")
+            self.show_error("Permission denied",
+                "Run:\nsudo /usr/local/bin/fan-control.sh start")
             return False
         except Exception as e:
-            self.show_error("Fehler", str(e))
+            self.show_error("Error", str(e))
             return False
 
     def run_ryzenadj(self, *args):
@@ -152,11 +152,11 @@ class FanControlWindow(Adw.ApplicationWindow):
             if "Sucessfully" in result.stdout or "Successfully" in result.stdout:
                 return True
             if result.returncode != 0:
-                self.show_error("ryzenadj Fehler", result.stderr or "Unbekannter Fehler")
+                self.show_error("ryzenadj error", result.stderr or "Unknown error")
                 return False
             return True
         except Exception as e:
-            self.show_error("Fehler", str(e))
+            self.show_error("Error", str(e))
             return False
 
     def save_tuning_config(self, stapm, fast, slow, temp, co, cogfx, gpu_level):
@@ -187,7 +187,7 @@ class FanControlWindow(Adw.ApplicationWindow):
             subprocess.run(cmd, input=content, text=True, capture_output=True)
             return True
         except Exception as e:
-            self.show_error("Fehler beim Speichern", str(e))
+            self.show_error("Error saving settings", str(e))
             return False
 
     def load_tuning_config(self):
@@ -214,7 +214,7 @@ class FanControlWindow(Adw.ApplicationWindow):
     def create_temp_card(self):
         """Create temperature display card with all sensors"""
         card = Adw.PreferencesGroup()
-        card.set_title("Temperaturen")
+        card.set_title("Temperatures")
 
         temp_labels = {}
 
@@ -235,7 +235,7 @@ class FanControlWindow(Adw.ApplicationWindow):
     def create_power_display_card(self):
         """Create power display card"""
         card = Adw.PreferencesGroup()
-        card.set_title("Leistung")
+        card.set_title("Power")
 
         power_labels = {}
 
@@ -268,7 +268,7 @@ class FanControlWindow(Adw.ApplicationWindow):
 
         # Mode row
         mode_row = Adw.ComboRow()
-        mode_row.set_title("Modus")
+        mode_row.set_title("Mode")
         modes = Gtk.StringList.new(["auto", "fixed", "curve"])
         mode_row.set_model(modes)
         mode_row.connect("notify::selected", self.on_mode_changed, fan_id)
@@ -302,7 +302,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         card.set_title("APU Power Mode")
 
         mode_row = Adw.ComboRow()
-        mode_row.set_title("Modus")
+        mode_row.set_title("Mode")
         modes = Gtk.StringList.new(["quiet", "balanced", "performance"])
         mode_row.set_model(modes)
         mode_row.connect("notify::selected", self.on_power_mode_changed)
@@ -314,8 +314,8 @@ class FanControlWindow(Adw.ApplicationWindow):
     def create_curve_card(self):
         """Create curve editor card"""
         card = Adw.PreferencesGroup()
-        card.set_title("Lüfterkurven")
-        card.set_description("Temp-Schwellen für Level 1-5 (kommagetrennt)")
+        card.set_title("Fan Curves")
+        card.set_description("Temperature thresholds for levels 1-5 (comma separated)")
 
         # Ramp up row
         rampup_row = Adw.ActionRow()
@@ -341,7 +341,7 @@ class FanControlWindow(Adw.ApplicationWindow):
 
         # Apply button
         apply_row = Adw.ActionRow()
-        apply_btn = Gtk.Button(label="Anwenden")
+        apply_btn = Gtk.Button(label="Apply")
         apply_btn.add_css_class("suggested-action")
         apply_btn.set_valign(Gtk.Align.CENTER)
         apply_btn.connect("clicked", self.apply_curves)
@@ -358,7 +358,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # GPU Performance Level
         gpu_row = Adw.ComboRow()
         gpu_row.set_title("Performance Level")
-        gpu_row.set_subtitle("auto=dynamisch, high=max Takt")
+        gpu_row.set_subtitle("auto=dynamic, high=max clocks")
         levels = Gtk.StringList.new(["auto", "low", "high"])
         gpu_row.set_model(levels)
         gpu_row.connect("notify::selected", self.on_gpu_level_changed)
@@ -376,21 +376,21 @@ class FanControlWindow(Adw.ApplicationWindow):
                 with open("/sys/class/drm/card1/device/power_dpm_force_performance_level", "w") as f:
                     f.write(levels[selected])
             except PermissionError:
-                self.show_error("Keine Berechtigung",
-                    "GPU-Einstellung erfordert root.\nFühre aus: sudo chmod 666 /sys/class/drm/card1/device/power_dpm_force_performance_level")
+                self.show_error("Permission denied",
+                    "The GPU performance level needs write access to its sysfs node.\nEnable the helper with: sudo systemctl enable --now amdgpu-perms.service")
             except Exception as e:
-                self.show_error("Fehler", str(e))
+                self.show_error("Error", str(e))
 
     def create_tuning_card(self):
         """Create CPU/GPU tuning card with ryzenadj"""
         card = Adw.PreferencesGroup()
         card.set_title("Power Tuning (ryzenadj)")
-        card.set_description("Einstellungen werden bei Neustart zurückgesetzt")
+        card.set_description("Ryzenadj settings are reset on reboot")
 
         # STAPM (Sustained Power)
         stapm_row = Adw.ActionRow()
         stapm_row.set_title("STAPM (Sustained)")
-        stapm_row.set_subtitle("Dauerhafte TDP")
+        stapm_row.set_subtitle("Sustained TDP")
 
         self.stapm_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 25, 120, 5)
         self.stapm_scale.set_value(65)
@@ -405,7 +405,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # Fast Limit (Burst Power)
         fast_row = Adw.ActionRow()
         fast_row.set_title("Fast Limit (Burst)")
-        fast_row.set_subtitle("Kurzzeit-Boost")
+        fast_row.set_subtitle("Short-term boost")
 
         self.fast_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 25, 150, 5)
         self.fast_scale.set_value(80)
@@ -420,7 +420,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # Slow Limit
         slow_row = Adw.ActionRow()
         slow_row.set_title("Slow Limit")
-        slow_row.set_subtitle("Mittelfristige TDP")
+        slow_row.set_subtitle("Mid-term TDP")
 
         self.slow_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 25, 120, 5)
         self.slow_scale.set_value(65)
@@ -435,7 +435,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # Temp Limit
         temp_row = Adw.ActionRow()
         temp_row.set_title("Temp Limit")
-        temp_row.set_subtitle("Max CPU Temperatur")
+        temp_row.set_subtitle("Max CPU temperature")
 
         self.temp_limit_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 80, 100, 1)
         self.temp_limit_scale.set_value(95)
@@ -450,7 +450,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # Curve Optimizer (Undervolting)
         co_row = Adw.ActionRow()
         co_row.set_title("CPU Undervolt (CO)")
-        co_row.set_subtitle("Negativ = weniger Spannung")
+        co_row.set_subtitle("Negative = lower voltage")
 
         self.co_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, -30, 10, 1)
         self.co_scale.set_value(0)
@@ -465,7 +465,7 @@ class FanControlWindow(Adw.ApplicationWindow):
         # iGPU Curve Optimizer
         cogfx_row = Adw.ActionRow()
         cogfx_row.set_title("iGPU Undervolt (CO)")
-        cogfx_row.set_subtitle("Negativ = weniger Spannung")
+        cogfx_row.set_subtitle("Negative = lower voltage")
 
         self.cogfx_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, -30, 10, 1)
         self.cogfx_scale.set_value(0)
@@ -479,8 +479,8 @@ class FanControlWindow(Adw.ApplicationWindow):
 
         # Save checkbox
         save_row = Adw.ActionRow()
-        save_row.set_title("Beim Booten laden")
-        save_row.set_subtitle("Einstellungen speichern und automatisch anwenden")
+        save_row.set_title("Load at boot")
+        save_row.set_subtitle("Save settings and apply them automatically")
 
         self.save_tuning_switch = Gtk.Switch()
         self.save_tuning_switch.set_valign(Gtk.Align.CENTER)
@@ -490,7 +490,7 @@ class FanControlWindow(Adw.ApplicationWindow):
 
         # Apply button
         apply_row = Adw.ActionRow()
-        apply_btn = Gtk.Button(label="Tuning anwenden")
+        apply_btn = Gtk.Button(label="Apply tuning")
         apply_btn.add_css_class("suggested-action")
         apply_btn.set_valign(Gtk.Align.CENTER)
         apply_btn.connect("clicked", self.apply_tuning)
