@@ -8,11 +8,23 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib, Gio
+import glob
 import os
 import subprocess
 import shutil
 
 SYSFS_BASE = "/sys/class/ec_su_axb35"
+
+# amdgpu performance-level node. The DRM card index is not stable across boots,
+# so resolve it with a glob instead of hardcoding card1.
+DPM_GLOB = "/sys/class/drm/card*/device/power_dpm_force_performance_level"
+
+
+def dpm_path():
+    """Return the amdgpu performance-level node, or None if unavailable."""
+    matches = sorted(glob.glob(DPM_GLOB))
+    return matches[0] if matches else None
+
 
 # All temperature sensors to monitor
 TEMP_SENSORS = [
@@ -371,15 +383,21 @@ class FanControlWindow(Adw.ApplicationWindow):
         """Handle GPU performance level change"""
         levels = ["auto", "low", "high"]
         selected = combo.get_selected()
-        if selected < len(levels):
-            try:
-                with open("/sys/class/drm/card1/device/power_dpm_force_performance_level", "w") as f:
-                    f.write(levels[selected])
-            except PermissionError:
-                self.show_error("Permission denied",
-                    "The GPU performance level needs write access to its sysfs node.\nEnable the helper with: sudo systemctl enable --now amdgpu-perms.service")
-            except Exception as e:
-                self.show_error("Error", str(e))
+        if selected >= len(levels):
+            return
+        path = dpm_path()
+        if path is None:
+            self.show_error("Error", "amdgpu performance-level node not found")
+            return
+        try:
+            with open(path, "w") as f:
+                f.write(levels[selected])
+        except PermissionError:
+            self.show_error("Permission denied",
+                "The GPU performance level needs write access to its sysfs node.\n"
+                "Enable the helper with: sudo systemctl enable --now amdgpu-perms.service")
+        except Exception as e:
+            self.show_error("Error", str(e))
 
     def create_tuning_card(self):
         """Create CPU/GPU tuning card with ryzenadj"""
@@ -592,7 +610,8 @@ class FanControlWindow(Adw.ApplicationWindow):
             self.rampdown_entry.set_text(rampdown)
 
         # GPU Performance Level
-        gpu_level = self.read_file("/sys/class/drm/card1/device/power_dpm_force_performance_level")
+        dpm = dpm_path()
+        gpu_level = self.read_file(dpm) if dpm else None
         if gpu_level:
             levels = ["auto", "low", "high"]
             if gpu_level in levels:
