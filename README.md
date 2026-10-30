@@ -142,9 +142,29 @@ Edit `/etc/bosgame-fan-control.conf`:
 ```bash
 POWER_MODE="balanced"
 FAN_MODE="curve"
-RAMPUP_CURVE="60,70,80,88,95"
-RAMPDOWN_CURVE="50,60,70,78,85"
+RAMPUP_CURVE="45,58,68,78,88"
+RAMPDOWN_CURVE="40,52,62,72,82"
 ```
+
+### Fan curves
+
+The EC exposes six duty steps only (0, 20, 40, 60, 80, 100 %), so each
+curve is just five thresholds deciding *when* a step engages:
+
+- ramp-up: level rises when `temp >= rampup[level+1]`
+- ramp-down: level falls when `temp <= rampdown[level]`
+- thresholds are read from the EC sensor (`temp1`), which sits 2-4 C below Tctl
+- ramp-down must stay below ramp-up, or the fans oscillate
+
+The shipped default is a steady-floor profile: `45,58,68,78,88` up /
+`40,52,62,72,82` down. Level 1 latches at 45 C and is only released below
+40 C, so the fans hold a constant 20 % at idle instead of stopping and
+restarting every few minutes; 100 % arrives at 88 C, keeping sustained loads
+clear of the ~95 C throttle point.
+
+The GUI's **Apply** button writes the curves to the running system only.
+To keep them across reboots, set them in this file too - it is what
+`bosgame-fan-control.service` reads at boot.
 
 ## Supported Devices
 
