@@ -1,0 +1,13 @@
+[Unit]
+Description=Amdgpu DPM sysfs permissions for Bosgame Fan Control
+Documentation=https://github.com/wilhelmpa/bosgame-fan-control#gpu-performance-level
+After=systemd-udevd.service systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=90
+ExecStart=/usr/local/bin/amdgpu-perms.sh
+
+[Install]
+WantedBy=multi-user.target

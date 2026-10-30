@@ -8,8 +8,9 @@ GTK4/libadwaita GUI and systemd service for controlling fans on Bosgame M5 / Six
 - Fan modes: auto, fixed, curve
 - Custom temperature curves with hysteresis
 - APU power modes: quiet, balanced, performance
+- GPU performance level (auto / low / high) without sudo prompts
 - Real-time temperature monitoring (CPU, GPU, NVMe, WiFi, Ethernet)
-- Systemd service for persistent settings
+- Systemd services for persistent settings and sysfs permissions
 
 ## Requirements
 
@@ -17,6 +18,10 @@ GTK4/libadwaita GUI and systemd service for controlling fans on Bosgame M5 / Six
 - Python 3
 - GTK4, libadwaita
 - python-gobject
+
+The EC driver is an out-of-tree module and is not DKMS-packaged: rebuild and
+reinstall it after every kernel upgrade, otherwise the fan/power controls
+disappear from the GUI (harmless - the EC falls back to its own fan curve).
 
 ## Installation
 
@@ -26,8 +31,10 @@ GTK4/libadwaita GUI and systemd service for controlling fans on Bosgame M5 / Six
 # Then install fan control:
 sudo make install
 
-# Enable autostart
-sudo systemctl enable bosgame-fan-control.service
+# Enable autostart and the sysfs permission helper
+sudo systemctl daemon-reload
+sudo systemctl enable --now bosgame-fan-control.service
+sudo systemctl enable --now amdgpu-perms.service
 ```
 
 ## Usage
@@ -60,6 +67,72 @@ echo "50,60,70,78,85" > /sys/class/ec_su_axb35/fan1/rampdown_curve
 
 # Set power mode (quiet/balanced/performance)
 echo balanced > /sys/class/ec_su_axb35/apu/power_mode
+```
+
+## GPU Performance Level
+
+Changing the GPU performance level in the GUI writes to
+
+```
+/sys/class/drm/card*/device/power_dpm_force_performance_level
+```
+
+which the kernel exposes as `root:root 0644`. The mode is recreated on every
+boot, so a one-off `sudo chmod` only lasts until the next reboot. Writing it as
+a normal user therefore fails with:
+
+```
+GPU-Einstellung erfordert root.
+Führe aus: sudo chmod 666 /sys/class/drm/card1/device/power_dpm_force_performance_level
+```
+
+`amdgpu-perms.service` fixes this permanently. It is installed by `make install`
+and must be enabled once:
+
+```bash
+sudo systemctl enable --now amdgpu-perms.service
+```
+
+What it does, and why it is a separate unit:
+
+- runs `amdgpu-perms.sh`, which chmods `power_dpm_force_performance_level` (and
+  `power_dpm_state`) on **every** boot;
+- **waits** up to 60 s for the node to appear. On Strix Halo, amdgpu finishes
+  initialising *after* `multi-user.target`, so a chmod issued at service start
+  hits a path that does not exist yet and fails silently - this was the original
+  bug, and it also affects `fan-control.sh` if it tries to do the same thing;
+- does **not** depend on the `ec_su_axb35` driver, so it still works while that
+  module is missing (for example right after a kernel upgrade);
+- matches the node by `card*/` glob instead of hardcoding `card1`, because the
+  DRM card index is not stable across boots.
+
+Check it:
+
+```bash
+systemctl status amdgpu-perms.service
+ls -l /sys/class/drm/card*/device/power_dpm_force_performance_level
+```
+
+Expected: `active (exited)` and a mode of `-rw-rw-rw-`.
+
+If the node is still not writable, check that the unit was not started before
+the GPU appeared:
+
+```bash
+journalctl -b -u amdgpu-perms.service
+```
+
+On multi-user machines, `0666` is broader than necessary. If you prefer to grant
+only members of the `video` group, change the two lines in `amdgpu-perms.sh` to:
+
+```sh
+chown root:video "$f" && chmod 0664 "$f"
+```
+
+Manual one-off (not persistent):
+
+```bash
+sudo chmod 666 /sys/class/drm/card*/device/power_dpm_force_performance_level
 ```
 
 ## Configuration

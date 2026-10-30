@@ -19,6 +19,12 @@ wait_for_driver() {
     fi
 }
 
+# Locate the amdgpu DPM performance-level node.
+# The card index is not stable across boots, so never hardcode card1.
+dpm_file() {
+    ls /sys/class/drm/card*/device/power_dpm_force_performance_level 2>/dev/null | head -n 1
+}
+
 # Load configuration
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
@@ -43,8 +49,10 @@ set_permissions() {
     done
     chmod 666 "$SYSFS_BASE/apu/power_mode" 2>/dev/null
 
-    # GPU performance level control
-    chmod 666 /sys/class/drm/card1/device/power_dpm_force_performance_level 2>/dev/null
+    # GPU performance level is NOT handled here on purpose: it lives in
+    # amdgpu-perms.service. amdgpu finishes initialising after multi-user.target,
+    # so chmod-ing the DPM node from this script races the driver and fails
+    # silently. See README, "GPU Performance Level".
 
     echo "  Permissions set"
 }
@@ -130,8 +138,15 @@ apply_tuning() {
 
     # GPU Performance Level
     if [ -n "$GPU_LEVEL" ]; then
-        echo "$GPU_LEVEL" > /sys/class/drm/card1/device/power_dpm_force_performance_level 2>/dev/null
-        echo "  GPU Performance Level: $GPU_LEVEL"
+        local dpm
+        dpm="$(dpm_file)"
+        if [ -z "$dpm" ]; then
+            echo "  WARNING: amdgpu DPM node not found, skipping GPU level"
+        elif echo "$GPU_LEVEL" > "$dpm" 2>/dev/null; then
+            echo "  GPU Performance Level: $GPU_LEVEL"
+        else
+            echo "  WARNING: cannot write $dpm (permissions?) - is amdgpu-perms.service enabled?"
+        fi
     fi
 
     echo "Tuning settings applied"
